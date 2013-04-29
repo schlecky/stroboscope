@@ -29,9 +29,13 @@ float frequence; // Frequence du stroboscope
 long int periode;     // Periode
 int toChange;
 int cycl_denom;
+volatile int oldAB;
+volatile int AB;
 char freqstr[6];
 volatile int delai_clic;
 volatile float delta_freq;
+volatile int delta_mol;
+char lookup_table[] = {0,1,-1,0,-1,0,0,1,1,0,0,-1,0,-1,1,0};
 
 NAKED(_reset_vector__)
 {
@@ -67,6 +71,31 @@ void writeCycl()
   LCDWriteString("        "); 
 }
 
+void changeSet()
+{
+  if(toChange == CH_FREQ)
+  {
+    if(BTN_IN & BTN_CLIC)
+      delta_freq = 0.1*(delta_mol/4);
+    else
+      delta_freq = 5*(delta_mol/4);
+
+    if((frequence<1000-delta_freq) && (frequence>2+delta_freq)) 
+      frequence+=delta_freq;
+    
+    updateFreq();
+    writeFreq();
+  }
+  else if(toChange == CH_CYCL){
+    if(delta_mol<0){
+      if(cycl_denom<33) cycl_denom*=2;}
+    else{
+      if(cycl_denom>3) cycl_denom/=2;}
+    writeCycl();
+    updateFreq(); 
+  }
+}
+
 void main (void)
 {
   WDTCTL = WDTPW + WDTHOLD;        // Stop watchdog timer
@@ -81,8 +110,8 @@ void main (void)
   // bouton
   BTN_REN |= (BTN_MOL1|BTN_MOL2|BTN_CLIC);  // enable pull_ups
   BTN_OUT |= (BTN_MOL1|BTN_MOL2|BTN_CLIC);  // pull_up
-  BTN_IES |= (BTN_MOL2|BTN_CLIC);  // high to low transition
-  BTN_IE  |= (BTN_MOL2|BTN_CLIC);  // Enable interrupts
+  BTN_IES |= (BTN_MOL1|BTN_MOL2|BTN_CLIC);  // high to low transition
+  BTN_IE  |= (BTN_MOL1|BTN_MOL2|BTN_CLIC);  // Enable interrupts
 
   WRITE_SR(GIE); 		            //Enable global interrupts
   
@@ -90,7 +119,7 @@ void main (void)
   TACCTL1 |= OUTMOD_2;             // toggle/reset
 
   LCDInit();
-  frequence=2;
+  frequence=50;
   cycl_denom = 16;
   delta_freq=0.1;
   LCDGotoXY(0,0);
@@ -102,7 +131,12 @@ void main (void)
   while(1)
   {
     if(delai_clic<200) delai_clic++;
-    Delay(200);
+    //Delay(200);
+    if((delta_mol>3) || (delta_mol<-3))
+    {
+      changeSet();
+      delta_mol = delta_mol%4;
+    }
   }
 }
 
@@ -110,48 +144,7 @@ void main (void)
 // Port 2 interrupt service routine
 interrupt (PORT2_VECTOR) Port_2(void)
 {
-  if(BTN_IFG & BTN_MOL2)
-  {
-    BTN_IFG &= ~BTN_MOL2;
-    BTN_IE &= ~BTN_MOL2;
-    int i;
-    int count=0;
-    for(i=0;i<5;i++)
-    {
-      if(BTN_IN & BTN_MOL2) count++;
-    }
-    if(count==0)
-    {
-      for(i=0;i<5;i++)
-      {
-        if(BTN_IN & BTN_MOL1) count++;
-      }
-      if(toChange == CH_FREQ)
-      {
-        if(BTN_IN & BTN_CLIC)
-          delta_freq = 0.1;
-        else
-          delta_freq = 5;
-        //
-        if(count==0){
-          if(frequence<1000-delta_freq) frequence+=delta_freq;}
-        else if(count==5){
-          if(frequence>2+delta_freq) frequence-=delta_freq;}
-        updateFreq();
-        writeFreq();
-      }
-      else if(toChange == CH_CYCL){
-        if(count==0){
-          if(cycl_denom<33) cycl_denom*=2;}
-        else if(count==5){
-          if(cycl_denom>3) cycl_denom/=2;}
-        writeCycl();
-        updateFreq(); 
-      }
-    }
-    BTN_IE |= BTN_MOL2;
-  }
-  else if(BTN_IFG & BTN_CLIC)
+  if(BTN_IFG & BTN_CLIC)
   {
     BTN_IFG &= ~BTN_CLIC;
     BTN_IE &= ~BTN_CLIC;
@@ -179,5 +172,21 @@ interrupt (PORT2_VECTOR) Port_2(void)
       delai_clic=0;
     }
     BTN_IE |= BTN_CLIC;
+  }
+  else
+  {
+    if(BTN_IFG & BTN_MOL2)
+    {
+      BTN_IES ^= BTN_MOL2;
+      BTN_IFG &= ~BTN_MOL2;
+    }
+    else if(BTN_IFG & BTN_MOL1)
+    {
+      BTN_IES ^= BTN_MOL1;
+      BTN_IFG &= ~BTN_MOL1;
+    }
+    oldAB=AB<<2;
+    AB = (((BTN_IN & BTN_MOL1)/BTN_MOL1) | (((BTN_IN & BTN_MOL2)/BTN_MOL2)<<1)) & 0x0F;
+    delta_mol += lookup_table[oldAB | AB];
   }
 }
