@@ -80,7 +80,7 @@ void changeSet()
     else
       delta_freq = 5*(delta_mol/4);
 
-    if((frequence<1000-delta_freq) && (frequence>2+delta_freq)) 
+    if((frequence<1000-delta_freq) && (frequence>2-delta_freq)) 
       frequence+=delta_freq;
     
     updateFreq();
@@ -131,7 +131,7 @@ void main (void)
   while(1)
   {
     if(delai_clic<200) delai_clic++;
-    //Delay(200);
+    Delay(200);
     if((delta_mol>3) || (delta_mol<-3))
     {
       changeSet();
@@ -155,7 +155,7 @@ interrupt (PORT2_VECTOR) Port_2(void)
     }
     if(count==0)
     {
-      if(delai_clic<190)  //double clic
+      if((delai_clic<190) && (delai_clic>100))  //double clic
       {
         LCDGotoXY(0,0);
         if(toChange == CH_FREQ){
@@ -169,7 +169,7 @@ interrupt (PORT2_VECTOR) Port_2(void)
           toChange = CH_FREQ;
         }
       }
-      delai_clic=0;
+      else delai_clic=0;
     }
     BTN_IE |= BTN_CLIC;
   }
